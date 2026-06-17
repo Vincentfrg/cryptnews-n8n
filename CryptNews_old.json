@@ -1,0 +1,238 @@
+{
+  "name": "CryptNews",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f67e67c7-4436-4651-88ac-5100ab5b3df8",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&order=market_cap_desc&per_page=10&page=1&price_change_percentage=24h,48h",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        192,
+        -160
+      ],
+      "id": "cb8c58e3-236a-405b-98dc-dd1339932f23",
+      "name": "HTTP_Req_AllCrypto"
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/coins/pi-network/market_chart?vs_currency=eur&days=2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        192,
+        128
+      ],
+      "id": "7d28f96c-04c7-480b-bd4b-49dae79fb428",
+      "name": "HTTP_Req_PI"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.prompt }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        752,
+        -16
+      ],
+      "id": "b7c93190-42e2-4b02-ac17-712cdc510dc1",
+      "name": "HTTP_Req_Groq",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VF5Vh7LxXcml03T0",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst content = response.choices[0].message.content;\n\nreturn [{\n  json: {\n    emailContent: content\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -16
+      ],
+      "id": "c0ede8e2-c6f6-4db9-b0a6-a6da526453e4",
+      "name": "Format_mail"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst top10 = items\n  .filter(item => item.json.current_price !== undefined)\n  .map(item => `${item.json.name}: ${item.json.current_price}EUR | 24h: ${item.json.price_change_percentage_24h?.toFixed(2)}%`);\n\nconst piItem = items.find(item => item.json.prices);\nconst piPrices = piItem.json.prices;\nconst piFirst = piPrices[0][1];\nconst piLast = piPrices[piPrices.length - 1][1];\nconst piChange = ((piLast - piFirst) / piFirst * 100).toFixed(2);\nconst piSummary = `Pi Network: ${piLast.toFixed(4)}EUR | 48h: ${piChange}%`;\n\n// Pas de \\n — séparateur simple\nconst report = `TOP 10: ${top10.join(' | ')} | ${piSummary}`;\nconst prompt = `Tu es un analyste crypto. Données marché 48h : ${report}. Génère un rapport en français avec : 1) Tendance générale 2) Analyse Bitcoin 3) Analyse Pi Network 4) Conclusion 2 lignes.`;\n\nreturn [{ json: { report, prompt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -16
+      ],
+      "id": "d7043023-a5ca-4482-9130-5dec32d046fc",
+      "name": "Format_report"
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_EMAIL@gmail.com",
+        "toEmail": "YOUR_EMAIL@gmail.com",
+        "subject": "= 🚀 Crypto Daily Report - {{ $now.toFormat('dd/MM/yyyy') }}",
+        "emailFormat": "text",
+        "text": "={{ $json.emailContent }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1152,
+        -16
+      ],
+      "id": "346656df-1cfe-45ac-b803-2293cffdb189",
+      "name": "Send an Email",
+      "webhookId": "13279a19-bb2e-4df6-a969-50a6c1e8e799",
+      "credentials": {
+        "smtp": {
+          "id": "FyFqbCYoNtF3zujA",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        368,
+        -16
+      ],
+      "id": "4f55239f-5c2a-4808-a86e-aab2b2531a50",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP_Req_AllCrypto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP_Req_PI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_Req_AllCrypto": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_Req_PI": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HTTP_Req_Groq": {
+      "main": [
+        [
+          {
+            "node": "Format_mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_report": {
+      "main": [
+        [
+          {
+            "node": "HTTP_Req_Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_mail": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Format_report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f36a195f-9918-4a24-90be-f57c55692d3e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d886379a17e207c5e125da1142bff762ac81bb822c9571d485c3b42c5839fe50"
+  },
+  "nodeGroups": [],
+  "id": "n77jbvTHUKOmF0Oa",
+  "tags": []
+}
